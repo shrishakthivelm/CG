@@ -1,0 +1,1523 @@
+LINE CLIPPING ALGORITHM
+Cohen - Sutherland and Liang Barsky/////////////////////////////////////////////////////////////////////////////
+#include <windows.h>
+#ifdef __APPLE__
+#include <GLUT/glut.h>
+#else
+#include <GL/glut.h>
+#endif
+
+#include <stdlib.h>
+#include <iostream>
+using namespace std;
+#define SCREEN_HEIGHT 480 //screen size is considered as 640 x 480
+
+
+struct POINT2D
+{
+    float x;
+    float y;
+};
+
+POINT2D ptArr[50];
+POINT2D ptArrClipped[50];
+
+int i=0;
+int k=0;
+
+bool window = false;
+bool line = false;
+bool clipped = false;
+
+int xw_min, yw_min, xw_max, yw_max;
+
+// Define the region codes
+const int INSIDE = 0;     // 0000
+const int LEFT = 1;       // 0001
+const int RIGHT = 2;      // 0010
+const int BOTTOM = 4;     // 0100
+const int TOP = 8;        // 1000
+
+
+
+//to alter the coordinates range
+void init()
+{
+    glClearColor(1, 1, 1, 0);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(0,640,0,480);
+}
+
+
+void display()
+{
+    glClear(GL_COLOR_BUFFER_BIT);
+    glColor3f(0,0,1);
+
+    /*cout <<"i: " <<i <<" " <<"k: " <<k <<endl;
+    for (int j=0; j<i-1; j+=2)
+    {
+        cout <<ptArr[j].x <<" & " <<ptArr[j].y <<endl;
+    }
+    for (int j=0; j<k-1; j+=2)
+    {
+        cout <<ptArrClipped[j].x <<" & " <<ptArrClipped[j].y <<endl;;
+    }*/
+
+
+    if(!window)
+    {
+        glBegin(GL_POINTS);
+            for (int j=0; j<i; j++)
+            {
+                glVertex2f(ptArr[j].x, ptArr[j].y);
+            }
+        glEnd();
+    }
+
+    if(window)
+    {
+        glBegin(GL_POINTS);
+            for (int j=0; j<i; j++)
+            {
+                glVertex2f(ptArr[j].x, ptArr[j].y);
+            }
+        glEnd();
+
+        glBegin(GL_LINE_LOOP);
+            glVertex2f(xw_min, yw_min);
+            glVertex2f(xw_min, yw_max);
+            glVertex2f(xw_max, yw_max);
+            glVertex2f(xw_max, yw_min);
+        glEnd();
+
+        glColor3f(1,0,0);
+        glBegin(GL_LINES);
+            for (int j = 0; j<i-1; j+=2)
+            {
+                glVertex2f(ptArr[j].x, ptArr[j].y);
+                glVertex2f(ptArr[j + 1].x, ptArr[j + 1].y);
+            }
+        glEnd();
+
+        if(clipped)
+        {
+            glColor3f(0,1,0);
+            glBegin(GL_LINES);
+                for (int j = 0; j<k-1; j+=2)
+                {
+                    glVertex2f(ptArrClipped[j].x, ptArrClipped[j].y);
+                    glVertex2f(ptArrClipped[j + 1].x, ptArrClipped[j + 1].y);
+                }
+            glEnd();
+        }
+    }
+
+    glFlush();
+}
+
+
+void mouse(int button, int state, int x, int y)
+{
+    glColor3f(0,0,0);
+    glPointSize(2);
+    if (button==GLUT_LEFT_BUTTON && state==GLUT_DOWN)
+    {
+        ptArr[i].x = x;
+        ptArr[i++].y = SCREEN_HEIGHT - y;
+
+        cout <<"Current position: " <<x <<" " <<SCREEN_HEIGHT - y <<endl;
+        /*glBegin(GL_POINTS);
+            glVertex2f(x, SCREEN_HEIGHT-y);
+        glEnd();
+        glFlush();
+        */
+        glutPostRedisplay();
+    }
+    else if (button==GLUT_RIGHT_BUTTON && state==GLUT_DOWN)    //after clicking points, right click to draw and display
+    {
+        if(!window and i>=2)
+        {
+            xw_min = ptArr[0].x;
+            yw_min = ptArr[0].y;
+            xw_max = ptArr[1].x;
+            yw_max = ptArr[1].y;
+            window = true;
+            i = 0;
+        }
+
+        cout <<"Drawing object" <<endl;
+        glutPostRedisplay();
+    }
+}
+
+
+int Region_Code(POINT2D p)
+{
+    int code = INSIDE;
+    int x = p.x;
+    int y = p.y;
+
+    if (x < xw_min)
+        code |= LEFT;
+    else if (x > xw_max)
+        code |= RIGHT;
+
+    if (y < yw_min)
+        code |= BOTTOM;
+    else if (y > yw_max)
+        code |= TOP;
+
+    return code;
+}
+
+/*
+void Cohen_SutherLand_algo()
+{
+    //cout <<"\nWindow: " <<xw_min <<" " <<xw_max <<" and " <<yw_min <<" " <<yw_max <<endl;
+
+    for(int j=0; j<i-1; j+=2)
+    {
+        POINT2D p1 = ptArr[j];
+        POINT2D p2 = ptArr[j+1];
+
+        int code1 = Region_Code(p1);
+        int code2 = Region_Code(p2);
+
+        //cout <<"p1: " <<p1.x<<","<<p1.y <<" " <<"p2: " <<p2.x<<","<<p2.y <<endl;
+
+        bool accept = false;
+
+        ptArrClipped[k++] = p1;
+        ptArrClipped[k++] = p2;
+
+        while (true)
+        {
+            int t;
+            //cout <<"p1 code: " <<code1 <<" " <<"p2 code: " <<code2 <<endl;
+
+            // If both endpoints lie within rectangle
+            if ((code1 == 0) && (code2 == 0))
+            {
+                accept = true;
+                break;
+            }
+
+            // If both endpoints are outside --> same region
+            else if (code1 & code2)
+            {
+                k -= 2;                             // since the curr 2 point which we put in ptArrClipped is outside, we reject it!
+                break;
+            }
+
+            // Line is partially visible
+            else
+            {
+                int code_out;
+                float x,y;
+
+                //atleast one point outside -> pick it
+                if(code1!=0)
+                {
+                    code_out = code1;
+                    t = k-2;                    //out of 2 end point, selecting 1st endpoint
+                    //cout <<k <<endl;
+                }
+                else
+                {
+                    code_out = code2;
+                    t = k-1;                    //out of 2 end point, selecting 2nd endpoint
+                    //cout <<k <<endl;
+                }
+
+                //find the intersection point
+                // y = y1 + m * (x - x1)  and  x = x1 + 1/m * (y - y1)
+                float m = (p2.y - p1.y)/(p2.x - p1.x);
+
+                if (code_out & TOP)
+                {
+                    x = p1.x + (1/m)*(yw_max - p1.y);
+                    y = yw_max;
+                }
+                else if (code_out & BOTTOM)
+                {
+                    x = p1.x + (1/m)*(yw_min - p1.y);
+                    y = yw_min;
+                }
+                else if (code_out & RIGHT)
+                {
+                    y = p1.y + m*(xw_max - p1.x);
+                    x = xw_max;
+                }
+                else if (code_out & LEFT)
+                {
+                    y = p1.y + m*(xw_min - p1.x);
+                    x = xw_min;
+                }
+
+
+                if (code_out == code1)
+                {
+                    ptArrClipped[t].x = x;
+                    ptArrClipped[t].y = y;
+                    code1 = Region_Code(ptArrClipped[t]);
+                }
+                else
+                {
+                    ptArrClipped[t].x = x;
+                    ptArrClipped[t].y = y;
+                    code2 = Region_Code(ptArrClipped[t]);
+                }
+            }
+
+        }
+    }
+}
+*/
+
+void Liang_Barsky_algo()
+{
+    for(int j=0; j<i-1; j+=2)
+    {
+        POINT2D p1 = ptArr[j];
+        POINT2D p2 = ptArr[j+1];
+
+        float dx = (p2.x - p1.x);
+        float dy = (p2.y - p1.y);
+
+        // L, R, B, T
+        float p[4] = {-dx, dx, -dy, dy};
+        float q[4] = {p1.x-xw_min, xw_max-p1.x, p1.y-yw_min, yw_max-p1.y};
+
+        float u1 = 0.0f;
+        float u2 = 1.0f;
+
+        //bool visible = true;
+
+        for(int t=0; t<4; t++)
+        {
+            if (p[t] == 0)
+            {
+                if (q[t] < 0)
+                    break;   //line completely outside
+            }
+            else
+            {
+                float u = q[t]/p[t];
+                if (p[t] < 0)       // line - out(u1) to in(u2)
+                {
+                    /*if (u > u2)    // intersecting point > end point --> Line is fully outside
+                    {
+                        visible = false;
+                        break;
+                    }*/
+                    u1 = max(u1, u);
+                }
+                else              // line - in(u1) to out(u2)
+                {
+                    /*if (u < u1)   // intersecting point < start point --> Line is fully outside
+                    {
+                        visible = false;
+                        break;
+                    }*/
+                    u2 = min(u2, u);
+                }
+            }
+        }
+
+        //if (visible && u1 <= u2) // valid line segment in window
+        if (visible && u1 <= u2)
+        {
+            POINT2D clipped_p1, clipped_p2;
+
+            clipped_p1.x = p1.x + u1*dx;
+            clipped_p1.y = p1.y + u1*dy;
+
+            clipped_p2.x = p1.x + u2*dx;
+            clipped_p2.y = p1.y + u2*dy;
+
+            ptArrClipped[k++] = clipped_p1;
+            ptArrClipped[k++] = clipped_p2;
+        }
+    }
+}
+
+
+void keyboard(unsigned char key, int x, int y)
+{
+    if(key == 13)  // ASCII code for Enter key
+    {
+        cout << "Call clipping..." << endl;
+        //Cohen_SutherLand_algo();
+        Liang_Barsky_algo();
+        cout <<"done" <<endl;
+        clipped = true;
+        glutPostRedisplay();
+    }
+}
+
+
+int main(int argc, char** argv)
+{
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
+    glutInitWindowPosition(80,80);
+    glutInitWindowSize(640,480);
+    glutCreateWindow("drawing");
+
+    init();
+    glutDisplayFunc(display);
+    glutMouseFunc(mouse);
+    glutKeyboardFunc(keyboard);
+
+    glutMainLoop();
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+Cohen - Sutherland
+Cohen Sutherland
+
+#include <windows.h>  // Must be included before OpenGL headers
+#include <GL/glut.h>
+#include <cmath>
+#include <iostream>
+
+#define SCREEN_WIDTH  400
+#define SCREEN_HEIGHT 300
+
+using namespace std;
+
+struct MY_POINTS {
+    float x, y;
+};
+
+MY_POINTS ptArr[2];   // Stores two clicked points
+int countPts = 0;     // Counts clicks
+
+// Clipping window boundaries
+const float x_min = 100, x_max = 300;
+const float y_min = 100, y_max = 200;
+
+// Cohen-Sutherland Region Codes
+const int INSIDE = 0;  // 0000
+const int LEFT = 1;    // 0001
+const int RIGHT = 2;   // 0010
+const int BOTTOM = 4;  // 0100
+const int TOP = 8;     // 1000
+
+// Compute region code for a point (x, y)
+int computeCode(float x, float y) {
+    int code = INSIDE;
+
+    if (x < x_min) code |= LEFT;
+    else if (x > x_max) code |= RIGHT;
+    if (y < y_min) code |= BOTTOM;
+    else if (y > y_max) code |= TOP;
+
+    return code;
+}
+
+// Cohen-Sutherland Line Clipping Algorithm
+bool cohenSutherlandClip(float &x1, float &y1, float &x2, float &y2) {
+    int code1 = computeCode(x1, y1);
+    int code2 = computeCode(x2, y2);
+    bool accept = false;
+
+    while (true) {
+        if ((code1 == 0) && (code2 == 0)) {
+            accept = true;  // Both endpoints inside
+            break;
+        } else if (code1 & code2) {
+            return false;  // Both endpoints share an outside region (trivially rejected)
+        } else {
+            int codeOut = code1 ? code1 : code2;
+            float x, y;
+
+            if (codeOut & TOP) {
+                x = x1 + (x2 - x1) * (y_max - y1) / (y2 - y1);
+                y = y_max;
+            } else if (codeOut & BOTTOM) {
+                x = x1 + (x2 - x1) * (y_min - y1) / (y2 - y1);
+                y = y_min;
+            } else if (codeOut & RIGHT) {
+                y = y1 + (y2 - y1) * (x_max - x1) / (x2 - x1);
+                x = x_max;
+            } else if (codeOut & LEFT) {
+                y = y1 + (y2 - y1) * (x_min - x1) / (x2 - x1);
+                x = x_min;
+            }
+
+            if (codeOut == code1) {
+                x1 = x;
+                y1 = y;
+                code1 = computeCode(x1, y1);
+            } else {
+                x2 = x;
+                y2 = y;
+                code2 = computeCode(x2, y2);
+            }
+        }
+    }
+
+    return accept;
+}
+
+void drawLine(float x1, float y1, float x2, float y2, float r, float g, float b) {
+    glColor3f(r, g, b);
+    glBegin(GL_LINES);
+    glVertex2f(x1, y1);
+    glVertex2f(x2, y2);
+    glEnd();
+}
+
+void display() {
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Draw the Clipping Rectangle
+    glColor3f(0, 0, 1); // Blue color for the window
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(x_min, y_min);
+    glVertex2f(x_max, y_min);
+    glVertex2f(x_max, y_max);
+    glVertex2f(x_min, y_max);
+    glEnd();
+
+    if (countPts == 2) {
+        float x1 = ptArr[0].x, y1 = ptArr[0].y;
+        float x2 = ptArr[1].x, y2 = ptArr[1].y;
+
+        // Draw original line in red
+        drawLine(x1, y1, x2, y2, 1, 0, 0);
+
+        // Clip the line
+        if (cohenSutherlandClip(x1, y1, x2, y2)) {
+            // Draw clipped line in green
+            drawLine(x1, y1, x2, y2, 0, 1, 0);
+        }
+    }
+
+    glFlush();
+}
+
+void mouse(int button, int state, int x, int y) {
+    if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+        ptArr[countPts].x = x;
+        ptArr[countPts].y = SCREEN_HEIGHT - y;  // Convert to OpenGL coordinate system
+        countPts++;
+
+        cout << "Point " << countPts << ": (" << x << ", " << y << ")" << endl;
+
+        if (countPts == 2) {
+            glutPostRedisplay();  // Redraw when two points are selected
+        }
+    }
+}
+
+void init() {
+    glClearColor(0, 0, 0, 0);  // Set background color to black
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT);  // Set up 2D coordinate system
+}
+
+int main(int argc, char** argv) {
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
+    glutInitWindowSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+    glutInitWindowPosition(100, 100);
+    glutCreateWindow("Cohen-Sutherland Line Clipping");
+
+    init();
+    glutMouseFunc(mouse);
+    glutDisplayFunc(display);
+    glutMainLoop();
+
+    return 0;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Line drawing alg
+
+#ifdef __APPLE__
+#include <GLUT/glut.h>
+#else
+#include <GL/glut.h>
+#endif
+
+#include <iostream>
+#include <bits/stdc++.h>
+using namespace std;
+
+#define SCREEN_HEIGHT 480
+
+struct POINT2D
+{
+    float x;
+    float y;
+};
+POINT2D ptArr[5];
+int i = 0;
+
+
+void init()
+{
+    glClearColor(1, 1, 1, 0);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(0,640,0,480);
+}
+
+
+void showEndPoints()
+{
+    glColor3f(1, 0, 0);
+
+    glBegin(GL_POINTS);
+        for (int k = 0; k < 2; ++k)
+        {
+            glVertex2f(ptArr[k].x, ptArr[k].y);
+        }
+    glEnd();
+}
+
+
+
+void DDA_algorithm()
+{
+    float del_x = (ptArr[1].x - ptArr[0].x);
+    float del_y = (ptArr[1].y - ptArr[0].y);
+    int steps = 0;
+
+    if(abs(del_x) > abs(del_y)) {
+        steps = abs(del_x);
+    }
+    else {
+        steps = abs(del_y);
+    }
+
+    float x_incr = del_x/(float)steps;
+    float y_incr = del_y/(float)steps;
+
+    glColor3f(0,0,0);
+
+    glBegin(GL_POINTS);
+        float x_k = ptArr[0].x;
+        float y_k = ptArr[0].y;
+        for(int s=0; s<steps; s++)
+        {
+            glVertex2f(round(x_k), round(y_k));
+            x_k = x_k + x_incr;
+            y_k = y_k + y_incr;
+        }
+    glEnd();
+}
+
+
+/*
+void Bresenhams_algorithm()
+{
+    int del_x = (ptArr[1].x - ptArr[0].x);
+    int del_y = (ptArr[1].y - ptArr[0].y);
+
+    glColor3f(0,0,0);
+    float x_k = ptArr[0].x;
+    float y_k = ptArr[0].y;
+    int p_k = 2*del_y - del_x;
+
+    glBegin(GL_POINTS);
+        for(int s=0; s<del_x-1; s++)
+        {
+            glVertex2f(x_k, y_k);
+
+            if(p_k < 0)
+            {
+                x_k = x_k + 1;
+                p_k = p_k + 2*del_y;
+            }
+            else
+            {
+                x_k = x_k + 1;
+                y_k = y_k + 1;
+                p_k = p_k + 2*del_y - 2*del_x;
+            }
+        }
+    glEnd();
+}
+*/
+
+
+//all slope formula
+void Bresenhams_algorithm()
+{
+    int del_x = (ptArr[1].x - ptArr[0].x);
+    int del_y = (ptArr[1].y - ptArr[0].y);
+
+    int abs_del_x = abs(del_x);
+    int abs_del_y = abs(del_y);
+
+    if(abs_del_x==0)    //vertical line
+    {
+        glColor3f(1,0,0);
+        float x_k = ptArr[0].x;
+        float y_k = ptArr[0].y;
+        glBegin(GL_POINTS);
+            for(int s=0; s<=abs_del_y-1; s++)
+            {
+                glVertex2f(x_k, y_k);
+                y_k += (del_y > 0) ? 1 : -1;
+            }
+        glEnd();
+    }
+
+    else if(abs_del_y==0)  //horizontal line
+    {
+        glColor3f(1,0,0);
+        float x_k = ptArr[0].x;
+        float y_k = ptArr[0].y;
+        glBegin(GL_POINTS);
+            for(int s=0; s<=abs_del_x-1; s++)
+            {
+                glVertex2f(x_k, y_k);
+                x_k += (del_x > 0) ? 1 : -1;
+            }
+        glEnd();
+    }
+
+    else
+    {
+        glColor3f(0,0,0);
+
+        if (abs_del_x >= abs_del_y)
+        {
+            float x_k = ptArr[0].x;
+            float y_k = ptArr[0].y;
+            int p_k = 2*abs_del_y - abs_del_x;
+
+            glBegin(GL_POINTS);
+                for(int s=0; s<=abs_del_x; s++)
+                {
+                    glVertex2f(x_k, y_k);
+
+                    if(p_k < 0)
+                    {
+                        x_k += (del_x > 0) ? 1 : -1;
+                        p_k += 2*abs_del_y;
+                    }
+                    else
+                    {
+                        x_k += (del_x > 0) ? 1 : -1;
+                        y_k += (del_y > 0) ? 1 : -1;
+                        p_k += 2*abs_del_y - 2*abs_del_x;
+                    }
+                }
+            glEnd();
+        }
+        else
+        {
+            float x_k = ptArr[0].x;
+            float y_k = ptArr[0].y;
+            int p_k = 2*abs_del_x - abs_del_y;
+
+            glBegin(GL_POINTS);
+                for(int s=0; s<=abs_del_y-1; s++)
+                {
+                    glVertex2f(x_k, y_k);
+
+                    if(p_k < 0)
+                    {
+                        y_k += (del_y > 0) ? 1 : -1;
+                        p_k += 2 * abs_del_x;
+                    }
+                    else
+                    {
+                        x_k += (del_x > 0) ? 1 : -1;
+                        y_k += (del_y > 0) ? 1 : -1;
+                        p_k += 2*abs_del_x - 2*abs_del_y;
+                    }
+                }
+            glEnd();
+        }
+    }
+}
+
+
+void display()
+{
+    glClear(GL_COLOR_BUFFER_BIT);
+    showEndPoints();
+    if(i==0)
+    {
+        //DDA_algorithm();
+        Bresenhams_algorithm();
+    }
+    glFlush();
+}
+
+
+
+
+void mouse(int button, int state, int x, int y)
+{
+    glColor3f(1,0,0);
+
+    if (button==GLUT_LEFT_BUTTON && state==GLUT_DOWN)
+    {
+        ptArr[i].x = x;
+        ptArr[i++].y = SCREEN_HEIGHT - y;
+        cout <<"Current position: " <<x <<" " <<SCREEN_HEIGHT - y <<endl;
+        glBegin(GL_POINTS);
+            glVertex2f(x, SCREEN_HEIGHT-y);
+        glEnd();
+        glFlush();
+
+        if (i==2)
+        {
+            cout <<"draw line" <<endl;
+            i=0;
+            glutPostRedisplay();
+        }
+    }
+}
+
+
+int main(int argc, char** argv)
+{
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_SINGLE);
+
+    glutInitWindowSize(640, 480);
+    glutInitWindowPosition(100, 100);
+    glutCreateWindow("line drawing algo");
+
+    init();
+    glutMouseFunc(mouse);
+    glutDisplayFunc(display);
+    glutMainLoop();
+
+    return 0;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+TRANSFORMATION PROBLEMSHEET
+
+
+2. Write a program to use transformation functions available in OpenGL.  Draw an object through mouse clicks.  Once the object is drawn, use key presses to handle the transformations.
+For translation:
+Left(Home), Right(End), Pageup, PageDown keys
+For rotation:
+l – anticlockwise rotation
+r – clockwise rotation
+For Scaling
+i – enlarge
+d - decrease 
+
+
+#include <GL/glut.h>
+
+#include <iostream>
+using namespace std;
+#define SCREEN_HEIGHT 480	//screen size is considered as 640 x 480
+
+struct POINT2D
+{
+	float x;
+	float y;
+};
+
+POINT2D ptArr[50];
+int i=0;
+int j=0;
+
+float sx = 1, sy = 1;
+float tx = 0, ty = 0;
+float angle = 0;
+
+
+//to alter the coordinates range
+void init()
+{
+	glClearColor(1, 1, 1, 0);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluOrtho2D(0,640,0,480);
+}
+
+
+void display()
+{
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	glLoadIdentity();
+
+	glTranslatef(tx, ty, 0.0f);
+	glRotatef(angle, 0.0f, 0.0f, 1.0f);
+	glScalef(sx, sy, 1.0f);
+
+	cout <<tx <<" " <<ty <<" " <<sx <<" " <<sy <<" " <<angle <<endl;
+
+	glBegin(GL_LINE_LOOP);
+    	for (j=0; j<i; j++)
+    	{
+        	glVertex2f(ptArr[j].x, ptArr[j].y);
+    	}
+	glEnd();
+	glFlush();
+}
+
+
+void mouse(int button, int state, int x, int y)
+{
+	glColor3f(0,0,1);
+	glPointSize(2);
+	if (button==GLUT_LEFT_BUTTON && state==GLUT_DOWN)
+	{
+    	ptArr[i].x = x;
+    	ptArr[i++].y = SCREEN_HEIGHT - y;
+    	cout <<"Current position: " <<x <<" " <<y <<endl;
+    	glBegin(GL_POINTS);
+        	glVertex2f(x, SCREEN_HEIGHT-y);
+    	glEnd();
+    	glFlush();
+	}
+	else if (button==GLUT_RIGHT_BUTTON && state==GLUT_DOWN)	//after clicking points, right click to draw and display
+   {
+    	cout <<"Drawing object";
+    	glutPostRedisplay();
+	}
+
+}
+
+
+
+void handleBasicKeys(unsigned char key, int x, int y)
+{
+	if(key=='i')
+	{
+    	sx += 0.1f;
+    	sy += 0.1f;
+	}
+	else if(key=='d')
+	{
+    	sx -= 0.1f;
+    	sy -= 0.1f;
+    	if (sx < 0.1f) sx = 0.1f; // Prevent negative scaling
+    	if (sy < 0.1f) sy = 0.1f;
+	}
+	else if(key=='l')
+	{
+    	angle -= 2.0f;
+	}
+	else if(key=='r')
+	{
+    	angle += 2.0f;
+	}
+	else
+	{
+    	cout <<"Other keys pressed!" <<endl;
+	}
+	glutPostRedisplay();
+}
+
+
+void handleSpecialKeys(int key, int x, int y)
+{
+	if(key==GLUT_KEY_PAGE_UP)
+	{
+    	ty += 1;
+	}
+	else if(key==GLUT_KEY_PAGE_DOWN)
+	{
+    	ty -= 1;
+	}
+	else if(key==GLUT_KEY_HOME)
+	{
+    	tx -= 1;
+	}
+	else if (key==GLUT_KEY_END)
+	{
+    	tx += 1;
+	}
+	else
+	{
+    	cout <<"other special char pressed!" <<endl;
+	}
+	glutPostRedisplay();
+}
+
+
+int main(int argc, char** argv)
+{
+	glutInit(&argc, argv);
+	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
+
+	glutInitWindowPosition(80,80);
+	glutInitWindowSize(640,480);
+	glutCreateWindow("drawing");
+
+	init();
+	glutDisplayFunc(display);
+	glutMouseFunc(mouse);
+	glutKeyboardFunc(handleBasicKeys);
+	glutSpecialFunc(handleSpecialKeys);
+	glutMainLoop();
+}
+
+
+#ifdef __APPLE__
+#include <GLUT/glut.h>
+#else
+#include <GL/glut.h>
+#endif
+
+#include <stdlib.h>
+#include <iostream>
+using namespace std;
+#define SCREEN_HEIGHT 480	//screen size is considered as 640 x 480
+
+
+struct POINT2D
+{
+    float x;
+    float y;
+};
+
+POINT2D ptArr[50];
+int i=0;
+int j=0;
+bool done = false;
+
+float sx = 1, sy = 1;
+float tx = 0, ty = 0;
+float angle = 0;
+
+
+//to alter the coordinates range
+void init()
+{
+    glClearColor(1, 1, 1, 0);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(0,640,0,480);
+}
+
+
+void display()
+{
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if(!done)
+    {
+        glColor3f(0, 0, 1);
+        glBegin(GL_POINTS);
+            for (int j = 0; j < i; j++) {
+                glVertex2f(ptArr[j].x, ptArr[j].y);
+            }
+        glEnd();
+    }
+
+    if(done)
+    {
+        glPushMatrix();
+
+        glTranslatef(tx, ty, 0.0f);
+        glRotatef(angle, 0.0f, 0.0f, 1.0f);
+        glScalef(sx, sy, 1.0f);
+        cout <<tx <<" " <<ty <<" " <<sx <<" " <<sy <<" " <<angle <<endl;
+
+        glBegin(GL_LINE_LOOP);
+            for (j=0; j<i; j++)
+            {
+                glVertex2f(ptArr[j].x, ptArr[j].y);
+            }
+        glEnd();
+
+        glPopMatrix();
+    }
+    glFlush();
+}
+
+
+void mouse(int button, int state, int x, int y)
+{
+    glColor3f(0,0,1);
+    glPointSize(2);
+    if (button==GLUT_LEFT_BUTTON && state==GLUT_DOWN)
+    {
+        ptArr[i].x = x;
+        ptArr[i++].y = SCREEN_HEIGHT - y;
+        cout <<"Current position: " <<x <<" " <<SCREEN_HEIGHT - y <<endl;
+        glutPostRedisplay();
+    }
+    else if (button==GLUT_RIGHT_BUTTON && state==GLUT_DOWN)    //after clicking points, right click to draw and display
+    {
+        done = true;
+        cout <<"Drawing object";
+        glutPostRedisplay();
+    }
+}
+
+
+void handleBasicKeys(unsigned char key, int x, int y)
+{
+	if(key=='i')
+	{
+    	sx += 0.1f;
+    	sy += 0.1f;
+	}
+	else if(key=='d')
+	{
+    	sx -= 0.1f;
+    	sy -= 0.1f;
+    	if (sx < 0.1f) sx = 0.1f; // Prevent negative scaling
+    	if (sy < 0.1f) sy = 0.1f;
+	}
+	else if(key=='l')
+	{
+    	angle -= 2.0f;
+	}
+	else if(key=='r')
+	{
+    	angle += 2.0f;
+	}
+	else
+	{
+    	cout <<"Other keys pressed!" <<endl;
+	}
+	glutPostRedisplay();
+}
+
+
+void handleSpecialKeys(int key, int x, int y)
+{
+	if(key==GLUT_KEY_PAGE_UP)
+	{
+    	ty += 5;
+	}
+	else if(key==GLUT_KEY_PAGE_DOWN)
+	{
+    	ty -= 5;
+	}
+	else if(key==GLUT_KEY_HOME)
+	{
+    	tx -= 5;
+	}
+	else if (key==GLUT_KEY_END)
+	{
+    	tx += 5;
+	}
+	else
+	{
+    	cout <<"other special char pressed!" <<endl;
+	}
+	glutPostRedisplay();
+}
+
+
+
+int main(int argc, char** argv)
+{
+	glutInit(&argc, argv);
+	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
+	glutInitWindowPosition(80,80);
+	glutInitWindowSize(640,480);
+	glutCreateWindow("drawing");
+
+	init();
+	glutDisplayFunc(display);
+	glutMouseFunc(mouse);
+	glutKeyboardFunc(handleBasicKeys);
+	glutSpecialFunc(handleSpecialKeys);
+	glutMainLoop();
+}
+
+—---------------------------------------------------------------------------------------------------------------------------
+
+Write a program that includes the following functions. ( as we study in theory part – pass one array, return another array)
+translation function which takes an array of points, translation units and returns the new translated set of points.
+Rotation function that takes an array of points along with an angle of rotation and returns new rotated points.
+Scaling function that takes an array of points and scaling factors which returns the new set of points.
+Write a menu driven program to show these 3 options.  Apply the selected transformation for an already drawn object.
+
+
+#ifdef __APPLE__
+#include <GLUT/glut.h>
+#else
+#include <GL/glut.h>
+#endif
+
+#include <stdlib.h>
+#include <iostream>
+#include <math.h>
+using namespace std;
+#define SCREEN_HEIGHT 480	//screen size is considered as 640 x 480
+
+
+struct POINT2D
+{
+    float x;
+    float y;
+};
+
+POINT2D ptArr[50];
+int i=0;
+bool done = false;
+int transformation = 0;
+
+
+
+//to alter the coordinates range
+void init()
+{
+    glClearColor(1, 1, 1, 0);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(0,640,0,480);
+}
+
+
+void translation(float tx, float ty)
+{
+    for (int j = 0; j<i ; j++)
+    {
+        ptArr[j].x = ptArr[j].x + tx;
+        ptArr[j].y = ptArr[j].y + ty;
+    }
+}
+
+void rotation(float theta, float xf, float yf)
+{
+    theta = theta * (M_PI / 180.0); //convert to rad
+    for (int k=0; k<i; k++)
+    {
+        float nx = xf + (ptArr[k].x - xf)*cos(theta) - (ptArr[k].y - yf)*sin(theta);
+        float ny = yf + (ptArr[k].x - xf)*sin(theta) + (ptArr[k].y - yf)*cos(theta);
+
+        ptArr[k].x = nx;
+        ptArr[k].y = ny;
+    }
+}
+
+
+void scaling(float sx, float sy, float xf, float yf)
+{
+    for (int j = 0; j<i ; j++)
+    {
+        float nx = ptArr[j].x*sx + xf*(1-sx);
+        float ny = ptArr[j].y*sy + yf*(1-sy);
+
+        ptArr[j].x = nx;
+        ptArr[j].y = ny;
+    }
+}
+
+void display()
+{
+    glClear(GL_COLOR_BUFFER_BIT);
+    if(!done)  //show endPoints
+    {
+        glColor3f(0, 0, 1);
+        glBegin(GL_POINTS);
+            for (int j = 0; j < i; j++)
+            {
+                glVertex2f(ptArr[j].x, ptArr[j].y);
+            }
+        glEnd();
+    }
+
+    if(done)
+    {
+        if (transformation==1)
+        {
+            float tx, ty;
+            cout <<"\nTranslation: " <<endl;
+            cout <<"Enter the translation point (tx, ty): ";
+            cin >>tx >>ty;
+            translation(tx, ty);
+        }
+        else if (transformation==2)
+        {
+            float theta, xf, yf;
+            cout <<"\nRotation about a fixed angle" <<endl;
+            cout <<"Enter the rotation angle (theta): ";
+            cin >>theta;
+            cout <<"Enter the fixed point: ";
+            cin >>xf >>yf;
+            rotation(theta, xf, yf);
+        }
+        else if (transformation==3)
+        {
+            float sx, sy, xf, yf;
+            cout <<"\nScaling about a fixed point:" <<endl;
+            cout <<"Enter the Scaling factor (sx, sy): ";
+            cin >>sx >>sy;
+            cout <<"Enter the fixed point: ";
+            cin >>xf >>yf;
+            scaling(sx, sy, xf, yf);
+        }
+
+        glBegin(GL_LINE_LOOP);
+            for (int j=0; j<i; j++)
+            {
+                glVertex2f(ptArr[j].x, ptArr[j].y);
+                cout <<ptArr[j].x <<" " <<ptArr[j].y <<endl;
+            }
+        glEnd();
+        transformation = 0;
+    }
+    glFlush();
+}
+
+
+void mouse(int button, int state, int x, int y)
+{
+    glColor3f(0,0,1);
+    glPointSize(2);
+    if (button==GLUT_LEFT_BUTTON && state==GLUT_DOWN)
+    {
+        ptArr[i].x = x;
+        ptArr[i++].y = SCREEN_HEIGHT - y;
+        cout <<"Current position: " <<x <<" " <<SCREEN_HEIGHT - y <<endl;
+        glutPostRedisplay();
+    }
+}
+
+void keyboard(unsigned char key, int x, int y) {
+    if (key == 13) {  // ASCII code for Enter key
+        done = true;
+        cout << "Drawing object completed." << endl;
+        glutPostRedisplay();
+    }
+}
+
+void fillOption(int selectedOption)
+{
+    transformation = selectedOption;
+    glutPostRedisplay();
+}
+
+
+int main(int argc, char** argv)
+{
+	glutInit(&argc, argv);
+	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
+	glutInitWindowPosition(80,80);
+	glutInitWindowSize(640,480);
+	glutCreateWindow("drawing");
+
+	init();
+	glutDisplayFunc(display);
+	glutMouseFunc(mouse);
+	glutKeyboardFunc(keyboard);
+
+    glutCreateMenu(fillOption);
+    glutAddMenuEntry ("Translation", 1);
+    glutAddMenuEntry ("Rotation", 2);
+    glutAddMenuEntry ("Scaling", 3);
+    glutAttachMenu (GLUT_RIGHT_BUTTON);
+
+	glutMainLoop();
+}
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Circle drawing Algorithm
+
+#ifdef __APPLE__
+#include <GLUT/glut.h>
+#else
+#include <GL/glut.h>
+#endif
+
+#include <stdlib.h>
+#include <iostream>
+#include <bits/stdc++.h>
+using namespace std;
+
+#define SCREEN_HEIGHT 480
+
+struct POINT2D
+{
+    float x;
+    float y;
+};
+POINT2D ptArr[5];
+int i = 0;
+
+
+void init()
+{
+    glClearColor(1, 1, 1, 0);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(0,640,0,480);
+}
+
+
+void showEndPoints()
+{
+    glColor3f(1, 0, 0);
+
+    glBegin(GL_POINTS);
+        for (int k = 0; k < 2; ++k)
+        {
+            glVertex2f(ptArr[k].x, ptArr[k].y);
+        }
+    glEnd();
+}
+
+
+void plot_Circle_Coordinates(float x_k, float y_k, float xc, float yc)
+{
+    glBegin(GL_POINTS);
+        glColor3f(0,0,0);     glVertex2f(xc + ( x_k), yc + ( y_k));
+        glColor3f(0,1,0);     glVertex2f(xc + (-x_k), yc + ( y_k));
+        glColor3f(0,0,1);     glVertex2f(xc + (-x_k), yc + (-y_k));
+        glColor3f(0,1,1);     glVertex2f(xc + ( x_k), yc + (-y_k));
+        glColor3f(1,0,0);     glVertex2f(xc + ( y_k), yc + ( x_k));
+        glColor3f(1,1,0);     glVertex2f(xc + (-y_k), yc + ( x_k));
+        glColor3f(1,0,1);     glVertex2f(xc + (-y_k), yc + (-x_k));
+        glColor3f(0.4,0,0.8); glVertex2f(xc + ( y_k), yc + (-x_k));
+    glEnd();
+}
+
+
+void midpoint_circle_algorithm()
+{
+    //circle center
+    float xc = ptArr[0].x;
+    float yc = ptArr[0].y;
+
+    //radius
+    float r = sqrt(pow((ptArr[1].x - xc),2) + pow((ptArr[1].y - yc),2));
+
+    float x_k = 0;
+    float y_k = r;
+    float p_k = 1 - r;
+
+    glBegin(GL_POINTS);
+        glColor3f(1,0,0); glVertex2f(xc+x_k, yc+y_k);  // initial point (0,r)
+    glEnd();
+    while(x_k < y_k)
+    {
+        if(p_k < 0)
+        {
+            x_k += 1;
+            p_k += 2*(x_k) + 1;
+        }
+        else
+        {
+            x_k += 1;
+            y_k -= 1;
+            p_k += 2*(x_k) - 2*(y_k) + 1;
+        }
+         plot_Circle_Coordinates(x_k, y_k, xc, yc);  //point the current point and other 7 points
+    }
+    glFlush();
+}
+
+
+
+void parametric_circle_equation()
+{
+    int A = ptArr[0].x;
+    int B = ptArr[0].y;
+    int px = ptArr[1].x;
+    int py = ptArr[1].y;
+
+    float R = sqrt(pow((A-px),2) + pow((B-py),2));
+
+    glColor3f(0, 0, 1);
+    glBegin(GL_POINTS);
+        for (float t=0; t<=2*M_PI; t+=0.01)
+        {
+           float xval = A + R*cos(t);
+           float yval = B + R*sin(t);
+           glVertex2f(xval, yval);
+        }
+    glEnd();
+}
+
+
+
+void standard_circle_equation()
+{
+    int A = ptArr[0].x;
+    int B = ptArr[0].y;
+    int px = ptArr[1].x;
+    int py = ptArr[1].y;
+
+    float R = sqrt(pow((A-px),2) + pow((B-py),2));
+
+    glColor3f(0, 0, 1);
+    glBegin(GL_POINTS);
+        for (float x = A - R; x <= A + R; x += 0.1)
+        {
+            float y1 = B + sqrt(R*R - (x - A)*(x - A));
+            float y2 = B - sqrt(R*R - (x - A)*(x - A));
+
+            glVertex2f(x, y1);
+            glVertex2f(x, y2);
+        }
+    glEnd();
+}
+
+
+
+void display()
+{
+    glClear(GL_COLOR_BUFFER_BIT);
+    showEndPoints();
+    if(i==0)
+    {
+        //standard_circle_equation();
+        //parametric_circle_equation();
+        midpoint_circle_algorithm();
+    }
+    glFlush();
+}
+
+
+
+void mouse(int button, int state, int x, int y)
+{
+    glColor3f(1,0,0);
+
+    if (button==GLUT_LEFT_BUTTON && state==GLUT_DOWN)
+    {
+        ptArr[i].x = x;
+        ptArr[i++].y = SCREEN_HEIGHT - y;
+        cout <<"Current position: " <<x <<" " <<SCREEN_HEIGHT - y <<endl;
+        glBegin(GL_POINTS);
+            glVertex2f(x, SCREEN_HEIGHT-y);
+        glEnd();
+        glFlush();
+
+        if (i==2)
+        {
+            cout <<"draw circle" <<endl;
+            i=0;
+            glutPostRedisplay();
+        }
+    }
+}
+
+
+int main(int argc, char** argv)
+{
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_SINGLE);
+
+    glutInitWindowSize(640, 480);
+    glutInitWindowPosition(100, 100);
+    glutCreateWindow("circle drawing algo");
+
+    init();
+    glutMouseFunc(mouse);
+    glutDisplayFunc(display);
+    glutMainLoop();
+
+    return 0;
+}
+
+
