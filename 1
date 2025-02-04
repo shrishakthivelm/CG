@@ -1521,3 +1521,297 @@ int main(int argc, char** argv)
 }
 
 
+POLYGON CLIP/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#include<windows.h> //Must
+#include<iostream>
+#include <GL/glut.h>
+#include <cmath>
+#include <vector>
+
+#define SCREEN_HEIGHT 300
+#define SCREEN_WIDTH 400
+//#define x_min 100
+//#define x_max 300
+//#define y_min 100
+//#define y_max 200
+
+using namespace std;
+
+float x_min,x_max,y_min,y_max;
+
+void init(){
+    glClearColor(0,0,0,0);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(0, 400, 0, 300);
+}
+
+struct MY_POINTS{
+    float x;
+    float y;
+};
+
+MY_POINTS ptArr[50];
+int countPts=0;
+
+int flag=0;
+
+void Initialize_win(){
+    x_min = ptArr[0].x;
+    y_min = ptArr[0].y;
+    x_max = ptArr[1].x;
+    y_max = ptArr[1].y;
+    countPts = 0;
+}
+
+vector<MY_POINTS> res;
+
+void mouse(int button,int state, int x, int y){
+
+    if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN){
+        ptArr[countPts].x = x;
+        ptArr[countPts++].y = SCREEN_HEIGHT - y;
+        cout<< "Current position : " << x << "\t" << y << "\n" ;
+        cout << "Count Points : " << countPts << endl;
+        glBegin(GL_POINTS);
+            glColor3f(1.0f, 1.0f, 1.0f);
+            glVertex2f(x, SCREEN_HEIGHT - y);
+        glEnd();
+        if(countPts==2 && flag==0){
+            flag=1;
+            Initialize_win();
+            glutPostRedisplay();
+        }
+        glFlush();
+    }
+    else if (button == GLUT_RIGHT_BUTTON){
+        cout << "Drawing the Object";
+        glutPostRedisplay();
+    }
+}
+
+void DrawWin(){
+    glBegin(GL_LINE_LOOP);
+
+    glColor3f(0.0f, 1.0f, 0.0f);
+    glVertex2f(x_min,y_min);
+    glVertex2f(x_max,y_min);
+    glVertex2f(x_max,y_max);
+    glVertex2f(x_min,y_max);
+
+    glEnd();
+}
+
+void DrawPoly(){
+    glBegin(GL_LINE_LOOP);
+    for(int i=0;i<countPts;i++){
+        glColor3f(1.0f, 1.0f, 0.0f);
+        glVertex2f(ptArr[i].x,ptArr[i].y);
+    }
+    glEnd();
+}
+
+
+void PolyClip(){
+    vector<MY_POINTS> r;
+    // left
+    for(int i=0;i<countPts;i++){
+        int p1,p2; // 0 - Out 1 - In
+        int i1,i2;
+        i1=i;
+        if(i==countPts-1) i2=0; else i2=i+1;
+        if (res[i1].x>=x_min) p1 = 1;
+        else p1 = 0;
+        if (res[i2].x>=x_min) p2 = 1;
+        else p2 = 0;
+
+        if(p1==1){
+            if(p2==1){ // IN - IN
+                r.push_back({res[i2].x,res[i2].y});
+            }
+            else{ // IN - OUT
+                if(res[i2].x != res[i1].x) {
+                    float m = (res[i2].y-res[i1].y)/(res[i2].x-res[i1].x);
+                    float y = res[i1].y + m*(x_min-res[i1].x);
+                    r.push_back({x_min,y});
+                } else {
+                    r.push_back({x_min,res[i1].y});
+                }
+            }
+        }
+        else{
+            if(p2==1){ // OUT - IN
+                if(res[i2].x != res[i1].x) {
+                    float m = (res[i2].y-res[i1].y)/(res[i2].x-res[i1].x);
+                    float y = res[i1].y + m*(x_min-res[i1].x);
+                    r.push_back({x_min,y});
+                } else {
+                    r.push_back({x_min,res[i2].y});
+                }
+                r.push_back({res[i2].x,res[i2].y});
+            }
+            // OUT - OUT: do nothing
+        }
+    }
+    res = r;
+    r.clear();
+
+    // right
+    for(int i=0;i<res.size();i++){
+        int p1,p2;
+        int i1,i2;
+        i1=i;
+        if(i==res.size()-1) i2=0; else i2=i+1;
+        if (res[i1].x<=x_max) p1 = 1;
+        else p1 = 0;
+        if (res[i2].x<=x_max) p2 = 1;
+        else p2 = 0;
+
+        if(p1==1){
+            if(p2==1){ // IN - IN
+                r.push_back({res[i2].x,res[i2].y});
+            }
+            else{ // IN - OUT
+                if(res[i2].x != res[i1].x) {
+                    float m = (res[i2].y-res[i1].y)/(res[i2].x-res[i1].x);
+                    float y = res[i1].y + m*(x_max-res[i1].x);
+                    r.push_back({x_max,y});
+                } else {
+                    r.push_back({x_max,res[i1].y});
+                }
+            }
+        }
+        else{
+            if(p2==1){ // OUT - IN
+                if(res[i2].x != res[i1].x) {
+                    float m = (res[i2].y-res[i1].y)/(res[i2].x-res[i1].x);
+                    float y = res[i1].y + m*(x_max-res[i1].x);
+                    r.push_back({x_max,y});
+                } else {
+                    r.push_back({x_max,res[i2].y});
+                }
+                r.push_back({res[i2].x,res[i2].y});
+            }
+        }
+    }
+    res = r;
+    r.clear();
+
+    // bottom
+    for(int i=0;i<res.size();i++){
+        int p1,p2;
+        int i1,i2;
+        i1=i;
+        if(i==res.size()-1) i2=0; else i2=i+1;
+        if (res[i1].y>=y_min) p1 = 1;
+        else p1 = 0;
+        if (res[i2].y>=y_min) p2 = 1;
+        else p2 = 0;
+
+        if(p1==1){
+            if(p2==1){ // IN - IN
+                r.push_back({res[i2].x,res[i2].y});
+            }
+            else{ // IN - OUT
+                if(res[i2].y != res[i1].y) {
+                    float m = (res[i2].x-res[i1].x)/(res[i2].y-res[i1].y);
+                    float x = res[i1].x + m*(y_min-res[i1].y);
+                    r.push_back({x,y_min});
+                } else {
+                    r.push_back({res[i1].x,y_min});
+                }
+            }
+        }
+        else{
+            if(p2==1){ // OUT - IN
+                if(res[i2].y != res[i1].y) {
+                    float m = (res[i2].x-res[i1].x)/(res[i2].y-res[i1].y);
+                    float x = res[i1].x + m*(y_min-res[i1].y);
+                    r.push_back({x,y_min});
+                } else {
+                    r.push_back({res[i2].x,y_min});
+                }
+                r.push_back({res[i2].x,res[i2].y});
+            }
+        }
+    }
+    res = r;
+    r.clear();
+
+    // top
+    for(int i=0;i<res.size();i++){
+        int p1,p2;
+        int i1,i2;
+        i1=i;
+        if(i==res.size()-1) i2=0; else i2=i+1;
+        if (res[i1].y<=y_max) p1 = 1;
+        else p1 = 0;
+        if (res[i2].y<=y_max) p2 = 1;
+        else p2 = 0;
+
+        if(p1==1){
+            if(p2==1){ // IN - IN
+                r.push_back({res[i2].x,res[i2].y});
+            }
+            else{ // IN - OUT
+                if(res[i2].y != res[i1].y) {
+                    float m = (res[i2].x-res[i1].x)/(res[i2].y-res[i1].y);
+                    float x = res[i1].x + m*(y_max-res[i1].y);
+                    r.push_back({x,y_max});
+                } else {
+                    r.push_back({res[i1].x,y_max});
+                }
+            }
+        }
+        else{
+            if(p2==1){ // OUT - IN
+                if(res[i2].y != res[i1].y) {
+                    float m = (res[i2].x-res[i1].x)/(res[i2].y-res[i1].y);
+                    float x = res[i1].x + m*(y_max-res[i1].y);
+                    r.push_back({x,y_max});
+                } else {
+                    r.push_back({res[i2].x,y_max});
+                }
+                r.push_back({res[i2].x,res[i2].y});
+            }
+        }
+    }
+    res = r;
+
+
+    glBegin(GL_LINE_LOOP);
+    glColor3f(1.0f, 0.0f, 0.0f);
+    for(const auto& point : res) {
+        glVertex2f(point.x, point.y);
+    }
+    glEnd();
+}
+
+void display(){
+    glClear(GL_COLOR_BUFFER_BIT);
+    DrawWin();
+    DrawPoly();
+    res.clear();  // Clear the vector before adding new points
+    for(int i=0;i<countPts;i++){
+        res.push_back({ptArr[i].x,ptArr[i].y});
+    }
+    PolyClip();
+    glFlush();
+}
+
+int main(int argc, char** argv){
+    glutInit(&argc,argv);
+    glutInitDisplayMode(GLUT_SINGLE|GLUT_RGB);
+
+
+    glutInitWindowPosition(80,80);
+    glutInitWindowSize(400,300);
+    glutCreateWindow("POLYGON CLIPPING");
+//    glClearColor(1,1,1,0); //Background Color
+
+    glutDisplayFunc(display);
+    init();
+    glutMouseFunc(mouse);
+
+    glutMainLoop();
+}
